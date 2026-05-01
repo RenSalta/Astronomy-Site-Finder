@@ -103,7 +103,7 @@ function makeDivider(label) {
 }
 
 
-latestYear.evaluate(function(latestYearValue) {
+latestYear.evaluate(function(latestYearValue){
   function addLegend() {
     var legend = ui.Panel({
       style: {
@@ -119,8 +119,18 @@ latestYear.evaluate(function(latestYearValue) {
       style: {fontWeight: 'bold', margin: '0 0 6px 0', color: '#041C69'}
     }));
 
-    var palette = ['black','#1a237e','#3949ab','#00acc1','#43a047','#fdd835','#fb8c00','#e53935'];
-    var names   = ['Low', '', '', '', '', '', '', 'High'];
+    var palette = [
+      '#000000',
+      '#0b1d51',
+      '#1e3a8a',
+      '#2563eb',
+      '#38bdf8',
+      '#a3e635',
+      '#fde047',
+      '#f97316',
+      '#ef4444'
+    ];
+    var names   = ['Low', '', '', '', '', '', '', '', 'High'];
 
     for (var i = 0; i < palette.length; i++) {
       legend.add(ui.Panel(
@@ -136,14 +146,24 @@ latestYear.evaluate(function(latestYearValue) {
   addLegend();
 
   var visParams = {
-    min: 0, max: 60,
-    palette: ['black','#1a237e','#3949ab','#00acc1','#43a047','#fdd835','#fb8c00','#e53935']
+    min: 0, max: 25,
+    palette: [
+      '#000000',
+      '#0b1d51',
+      '#1e3a8a',
+      '#2563eb',
+      '#38bdf8',
+      '#a3e635',
+      '#fde047',
+      '#f97316',
+      '#ef4444'
+    ]
   };
 
   var initialImage = viirs
     .filter(ee.Filter.calendarRange(latestYearValue, latestYearValue, 'year'))
     .mean();
-  Map.addLayer(initialImage, visParams, 'Nighttime Lights ' + latestYearValue);
+  Map.addLayer(initialImage, visParams, 'Nighttime Lights ' + latestYearValue, true, 0.6);
 
   var cityMarkerLayer = ui.Map.Layer();
   Map.layers().add(cityMarkerLayer);
@@ -164,7 +184,6 @@ latestYear.evaluate(function(latestYearValue) {
   }));
   Map.add(infoPanel);
 
-  //updateCityInfo
   function updateCityInfo(city, coords) {
     var point = ee.Geometry.Point([coords.lon, coords.lat]);
 
@@ -233,7 +252,6 @@ latestYear.evaluate(function(latestYearValue) {
 
         infoPanel.clear();
 
-        // City
         infoPanel.add(ui.Label({
           value: city,
           style: {fontWeight: 'bold', fontSize: '18px', color: '#041C69', margin: '0'}
@@ -243,7 +261,6 @@ latestYear.evaluate(function(latestYearValue) {
           style: {fontSize: '13px', color: '#041C69', margin: '0 0 4px 0'}
         }));
 
-        // Score
         infoPanel.add(ui.Label({
           value: 'STARGAZING SCORE   ' + score + ' / 100',
           style: {fontWeight: 'bold', fontSize: '12px', color: scoreColor, margin: '4px 0 0 0'}
@@ -253,7 +270,6 @@ latestYear.evaluate(function(latestYearValue) {
           style: {fontSize: '11px', color: '#4a6a88', margin: '0'}
         }));
 
-        // Moon
         infoPanel.add(makeDivider('  MOON'));
         infoPanel.add(ui.Label({
           value: moon.name + '   ' + moon.pct + '% illuminated',
@@ -264,7 +280,6 @@ latestYear.evaluate(function(latestYearValue) {
           style: {fontSize: '11px', color: moonColor, margin: '0'}
         }));
 
-        // Atmosphere
         infoPanel.add(makeDivider('  ATMOSPHERE'));
         infoPanel.add(ui.Label({
           value: 'Temp      ' + temp,
@@ -279,7 +294,6 @@ latestYear.evaluate(function(latestYearValue) {
           style: {fontSize: '12px', color: '#041C69', margin: '0'}
         }));
 
-        // Objects
         infoPanel.add(makeDivider('  BEST OBJECTS TONIGHT'));
         for (var i = 0; i < objects.length; i++) {
           infoPanel.add(ui.Label({
@@ -291,7 +305,6 @@ latestYear.evaluate(function(latestYearValue) {
     });
   }
 
-  // --- Main control panel (top-left) ---
   var title = ui.Label({
     value: 'Light Pollution Tracker',
     style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 8px 0', color: '#041C69'}
@@ -319,7 +332,6 @@ latestYear.evaluate(function(latestYearValue) {
     color: '#041C69'
   });
 
-  // --- Year slider ---
   var pollutionLayer = ui.Map.Layer();
   var lastYear = null;
 
@@ -328,7 +340,12 @@ latestYear.evaluate(function(latestYearValue) {
       .filter(ee.Filter.calendarRange(year, year, 'year'))
       .mean();
     pollutionLayer.setEeObject(yearImage);
-    pollutionLayer.setVisParams(visParams);
+    pollutionLayer.setVisParams({
+  min: visParams.min,
+  max: visParams.max,
+  palette: visParams.palette,
+  opacity: 0.6
+});
     pollutionLayer.setName('Light Pollution ' + year);
     if (!Map.layers().contains(pollutionLayer)) {
       Map.layers().add(pollutionLayer);
@@ -366,5 +383,4 @@ latestYear.evaluate(function(latestYearValue) {
   updateMapForYear(latestYearValue);
 });
 
-// -----------------------------------------
 Map.setOptions('SATELLITE');
