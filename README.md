@@ -1,6 +1,7 @@
 Light Pollution & Stargazing Analyzer
 
 An interactive geospatial tool built with Google Earth Engine to evaluate **stargazing conditions** across cities worldwide.
+Focused on some of the most populated cities in Colombia.
 
 This project combines satellite data, atmospheric conditions, and astronomical factors to generate a **Stargazing Score (0–100)** for any selected city.
 The project is still under development, and I am doing tests to make sure the program is useful and accurate. However, it might have errors or discrepancies from real-time data, and the one taken from the dataset.
