@@ -26,7 +26,6 @@ var cities = {
 };
 
 
-// 2. Datasets
 var viirs = ee.ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMCFG')
               .select('avg_rad');
 
@@ -35,11 +34,10 @@ var latestYear  = ee.Date(latestImage.get('system:time_start')).get('year');
 
 
 function getMoonPhase() {
-  var now         = new Date();
-  var refDate     = new Date(2000, 0, 6);
-  var lunarCycle  = 29.530588;
-  var daysSinceRef = (now - refDate) / 86400000;
-  var phase       = ((daysSinceRef % lunarCycle) + lunarCycle) % lunarCycle;
+  var refDate      = new Date(2000, 0, 6);
+  var lunarCycle   = 29.530588;
+  var daysSinceRef = (new Date() - refDate) / 86400000;
+  var phase        = ((daysSinceRef % lunarCycle) + lunarCycle) % lunarCycle;
   var illumination = (1 - Math.cos(phase / lunarCycle * 2 * Math.PI)) / 2;
 
   var name;
@@ -103,7 +101,9 @@ function makeDivider(label) {
 }
 
 
-latestYear.evaluate(function(latestYearValue){
+latestYear.evaluate(function(latestYearValue) {
+
+
   function addLegend() {
     var legend = ui.Panel({
       style: {
@@ -118,20 +118,8 @@ latestYear.evaluate(function(latestYearValue){
       value: 'Light Intensity',
       style: {fontWeight: 'bold', margin: '0 0 6px 0', color: '#041C69'}
     }));
-
-    var palette = [
-      '#000000',
-      '#0b1d51',
-      '#1e3a8a',
-      '#2563eb',
-      '#38bdf8',
-      '#a3e635',
-      '#fde047',
-      '#f97316',
-      '#ef4444'
-    ];
-    var names   = ['Low', '', '', '', '', '', '', '', 'High'];
-
+    var palette = ['#000000','#0b1d51','#1e3a8a','#2563eb','#38bdf8','#a3e635','#fde047','#f97316','#ef4444'];
+    var names   = ['Low','','','','','','','','High'];
     for (var i = 0; i < palette.length; i++) {
       legend.add(ui.Panel(
         [
@@ -145,29 +133,23 @@ latestYear.evaluate(function(latestYearValue){
   }
   addLegend();
 
+ 
   var visParams = {
     min: 0, max: 25,
-    palette: [
-      '#000000',
-      '#0b1d51',
-      '#1e3a8a',
-      '#2563eb',
-      '#38bdf8',
-      '#a3e635',
-      '#fde047',
-      '#f97316',
-      '#ef4444'
-    ]
+    palette: ['#000000','#0b1d51','#1e3a8a','#2563eb','#38bdf8','#a3e635','#fde047','#f97316','#ef4444']
   };
 
-  var initialImage = viirs
-    .filter(ee.Filter.calendarRange(latestYearValue, latestYearValue, 'year'))
-    .mean();
-  Map.addLayer(initialImage, visParams, 'Nighttime Lights ' + latestYearValue, true, 0.6);
+
+  Map.addLayer(
+    viirs.filter(ee.Filter.calendarRange(latestYearValue, latestYearValue, 'year')).mean(),
+    visParams, 'Nighttime Lights ' + latestYearValue, true, 0.6
+  );
+
 
   var cityMarkerLayer = ui.Map.Layer();
   Map.layers().add(cityMarkerLayer);
 
+  // --- Info panel (bottom-right) ---
   var infoPanel = ui.Panel({
     style: {
       width: '240px',
@@ -184,30 +166,26 @@ latestYear.evaluate(function(latestYearValue){
   }));
   Map.add(infoPanel);
 
-  function updateCityInfo(city, coords) {
-    var point = ee.Geometry.Point([coords.lon, coords.lat]);
+  // --- Cloud panel (top-right) ---
+  var cloudPanel = ui.Panel({
+    style: {
+      width: '240px',
+      position: 'top-right',
+      padding: '12px 16px',
+      backgroundColor: '#E5E4F5',
+      border: '1px solid #1e3a5a',
+      borderRadius: '10px'
+    }
+  });
+  cloudPanel.add(ui.Label({
+    value: 'Cloud cover: select a city',
+    style: {color: '#3a6a9a', fontSize: '12px'}
+  }));
+  Map.add(cloudPanel);
 
-    var era5land = ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY')
-      .select(['temperature_2m', 'u_component_of_wind_10m', 'v_component_of_wind_10m'])
-      .sort('system:time_start', false)
-      .first();
-
-    var era5 = ee.ImageCollection('ECMWF/ERA5/MONTHLY')
-      .select(['total_cloud_cover'])
-      .sort('system:time_start', false)
-      .first();
-
-    var landData = era5land.reduceRegion({
-      reducer: ee.Reducer.mean(),
-      geometry: point,
-      scale: 10000
-    });
-
-    var cloudData = era5.reduceRegion({
-      reducer: ee.Reducer.mean(),
-      geometry: point,
-      scale: 27830
-    });
+  
+  function updateMainInfo(city, coords) {
+    var region = ee.Geometry.Point([coords.lon, coords.lat]).buffer(50000);
 
     infoPanel.clear();
     infoPanel.add(ui.Label({
@@ -215,40 +193,38 @@ latestYear.evaluate(function(latestYearValue){
       style: {color: '#041C69', fontSize: '12px'}
     }));
 
-    landData.evaluate(function(landValues) {
-      if (!landValues) {
-        infoPanel.clear();
-        infoPanel.add(ui.Label({value: 'Data unavailable.', style: {color: '#f87171', fontSize: '14px'}}));
-        return;
-      }
+    ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY')
+      .select(['temperature_2m','u_component_of_wind_10m','v_component_of_wind_10m'])
+      .sort('system:time_start', false)
+      .first()
+      .reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: region,
+        scale: 10000,
+        bestEffort: true
+      })
+      .evaluate(function(v) {
+        if (!v) {
+          infoPanel.clear();
+          infoPanel.add(ui.Label({value: 'Data unavailable.', style: {color: '#3a6a9a', fontSize: '12px'}}));
+          return;
+        }
 
-      var temp      = landValues.temperature_2m
-                      ? (landValues.temperature_2m - 273.15).toFixed(1) + ' C'
-                      : 'N/A';
-      var u         = landValues.u_component_of_wind_10m || 0;
-      var v         = landValues.v_component_of_wind_10m || 0;
-      var windSpeed = Math.sqrt(u*u + v*v).toFixed(1);
-      var windDir   = getWindDirection(u, v);
-
-      cloudData.evaluate(function(cloudValues) {
-        var cloudRaw  = (cloudValues && cloudValues.total_cloud_cover !== null)
-                        ? cloudValues.total_cloud_cover : 0;
-        var cloudPct  = Math.round(cloudRaw * 100);
-        var cloudDesc = cloudPct < 20 ? 'Clear'
-                      : cloudPct < 50 ? 'Partly cloudy'
-                      : cloudPct < 80 ? 'Mostly cloudy'
-                      : 'Overcast';
-
-        var moon       = getMoonPhase();
-        var score      = getStargrazingScore(cloudPct, parseFloat(windSpeed), moon.pct);
-        var scoreDesc  = score >= 75 ? 'Great night for observing'
-                       : score >= 50 ? 'Decent conditions'
-                       : 'Challenging tonight';
+        var temp      = v.temperature_2m
+                        ? (v.temperature_2m - 273.15).toFixed(1) + ' C'
+                        : 'N/A';
+        var u         = v.u_component_of_wind_10m || 0;
+        var vv        = v.v_component_of_wind_10m || 0;
+        var windSpeed = Math.sqrt(u*u + vv*vv).toFixed(1);
+        var windDir   = getWindDirection(u, vv);
+        var moon      = getMoonPhase();
+        var score     = getStargrazingScore(50, parseFloat(windSpeed), moon.pct);
+        var scoreDesc = score >= 75 ? 'Great night for observing'
+                      : score >= 50 ? 'Decent conditions'
+                      : 'Challenging tonight';
         var scoreColor = score >= 75 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f87171';
         var moonColor  = moon.pct < 25 ? '#4ade80' : moon.pct < 65 ? '#fbbf24' : '#f87171';
-
-        var month   = new Date().getMonth() + 1;
-        var objects = getCelestialObjects(month);
+        var objects    = getCelestialObjects(new Date().getMonth() + 1);
 
         infoPanel.clear();
 
@@ -258,22 +234,21 @@ latestYear.evaluate(function(latestYearValue){
         }));
         infoPanel.add(ui.Label({
           value: coords.lat + 'N   ' + Math.abs(coords.lon) + 'W',
-          style: {fontSize: '13px', color: '#041C69', margin: '0 0 4px 0'}
+          style: {fontSize: '11px', color: '#041C69', margin: '0 0 4px 0'}
         }));
-
         infoPanel.add(ui.Label({
           value: 'STARGAZING SCORE   ' + score + ' / 100',
           style: {fontWeight: 'bold', fontSize: '12px', color: scoreColor, margin: '4px 0 0 0'}
         }));
         infoPanel.add(ui.Label({
-          value: scoreDesc,
-          style: {fontSize: '11px', color: '#4a6a88', margin: '0'}
+          value: scoreDesc + ' (updates with clouds)',
+          style: {fontSize: '10px', color: '#4a6a88', margin: '0'}
         }));
 
         infoPanel.add(makeDivider('  MOON'));
         infoPanel.add(ui.Label({
           value: moon.name + '   ' + moon.pct + '% illuminated',
-          style: {fontSize: '12px', color: '#e2d060', margin: '0 0 2px 0'}
+          style: {fontSize: '12px', color: '#041C69', margin: '0 0 2px 0'}
         }));
         infoPanel.add(ui.Label({
           value: 'Sky impact: ' + moon.impact,
@@ -289,10 +264,6 @@ latestYear.evaluate(function(latestYearValue){
           value: 'Wind      ' + windSpeed + ' m/s  ' + windDir,
           style: {fontSize: '12px', color: '#041C69', margin: '0 0 2px 0'}
         }));
-        infoPanel.add(ui.Label({
-          value: 'Clouds    ' + cloudPct + '%  ' + cloudDesc,
-          style: {fontSize: '12px', color: '#041C69', margin: '0'}
-        }));
 
         infoPanel.add(makeDivider('  BEST OBJECTS TONIGHT'));
         for (var i = 0; i < objects.length; i++) {
@@ -302,9 +273,82 @@ latestYear.evaluate(function(latestYearValue){
           }));
         }
       });
-    });
   }
 
+  // --- Cloud info (dewpoint depression method) ---
+  function updateCloudInfo(city, coords) {
+    var region = ee.Geometry.Point([coords.lon, coords.lat]).buffer(50000);
+
+    cloudPanel.clear();
+    cloudPanel.add(ui.Label({
+      value: 'Cloud cover: loading...',
+      style: {color: '#041C69', fontSize: '12px'}
+    }));
+
+    ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY')
+      .select(['temperature_2m', 'dewpoint_temperature_2m'])
+      .sort('system:time_start', false)
+      .first()
+      .reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: region,
+        scale: 10000,
+        bestEffort: true
+      })
+      .evaluate(function(v) {
+        cloudPanel.clear();
+
+        if (!v || v.temperature_2m == null || v.dewpoint_temperature_2m == null) {
+          cloudPanel.add(ui.Label({
+            value: 'Cloud data unavailable.',
+            style: {fontSize: '11px', color: '#3a6a9a'}
+          }));
+          return;
+        }
+
+        var temp  = v.temperature_2m;
+        var dewpt = v.dewpoint_temperature_2m;
+
+        // Dewpoint depression: 0 = saturated (cloudy), 25+ = dry (clear)
+        var depression = temp - dewpt;
+        var cloudPct   = Math.min(100, Math.max(0, Math.round(100 - (depression / 25) * 100)));
+        var cloudDesc  = cloudPct < 20 ? 'Clear'
+                       : cloudPct < 50 ? 'Partly cloudy'
+                       : cloudPct < 80 ? 'Mostly cloudy'
+                       : 'Overcast';
+
+        // Relative humidity via Magnus formula
+        var tempC = temp  - 273.15;
+        var dewC  = dewpt - 273.15;
+        var rh    = Math.round(
+                      100 * Math.exp((17.625 * dewC)  / (243.04 + dewC)) /
+                                Math.exp((17.625 * tempC) / (243.04 + tempC))
+                    );
+
+        cloudPanel.add(ui.Label({
+          value: city + ' — Sky conditions',
+          style: {fontWeight: 'bold', fontSize: '13px', color: '#041C69', margin: '0 0 6px 0'}
+        }));
+        cloudPanel.add(ui.Label({
+          value: 'Cloud cover:   ' + cloudPct + '%   ' + cloudDesc,
+          style: {fontSize: '12px', color: '#041C69', margin: '0 0 2px 0'}
+        }));
+        cloudPanel.add(ui.Label({
+          value: 'Humidity:        ' + rh + '%',
+          style: {fontSize: '12px', color: '#041C69', margin: '0 0 2px 0'}
+        }));
+        cloudPanel.add(ui.Label({
+          value: 'Dew point:      ' + dewC.toFixed(1) + ' C',
+          style: {fontSize: '12px', color: '#041C69', margin: '0 0 6px 0'}
+        }));
+        cloudPanel.add(ui.Label({
+          value: 'Source: ERA5-Land dewpoint depression',
+          style: {fontSize: '10px', color: '#3a6a9a', margin: '0'}
+        }));
+      });
+  }
+
+  // --- Control panel (top-left) ---
   var title = ui.Label({
     value: 'Light Pollution Tracker',
     style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 8px 0', color: '#041C69'}
@@ -319,33 +363,25 @@ latestYear.evaluate(function(latestYearValue){
       title.setValue(city + ' - Light Pollution');
       var point = ee.Geometry.Point([coords.lon, coords.lat]);
       Map.centerObject(point, coords.zoom);
-      var feature = ee.Feature(point, {name: city});
-      cityMarkerLayer.setEeObject(ee.FeatureCollection([feature]));
+      cityMarkerLayer.setEeObject(ee.FeatureCollection([ee.Feature(point, {name: city})]));
       cityMarkerLayer.setVisParams({color: 'red'});
-      updateCityInfo(city, coords);
+      updateMainInfo(city, coords);
+      updateCloudInfo(city, coords);
     }
   });
 
-  var yearLabel = ui.Label('Select year:', {
-    fontWeight: 'bold',
-    margin: '10px 0 0 0',
-    color: '#041C69'
-  });
-
+  // --- Year slider ---
   var pollutionLayer = ui.Map.Layer();
   var lastYear = null;
 
   function updateMapForYear(year) {
-    var yearImage = viirs
-      .filter(ee.Filter.calendarRange(year, year, 'year'))
-      .mean();
-    pollutionLayer.setEeObject(yearImage);
+    pollutionLayer.setEeObject(
+      viirs.filter(ee.Filter.calendarRange(year, year, 'year')).mean()
+    );
     pollutionLayer.setVisParams({
-  min: visParams.min,
-  max: visParams.max,
-  palette: visParams.palette,
-  opacity: 0.6
-});
+      min: visParams.min, max: visParams.max,
+      palette: visParams.palette, opacity: 0.6
+    });
     pollutionLayer.setName('Light Pollution ' + year);
     if (!Map.layers().contains(pollutionLayer)) {
       Map.layers().add(pollutionLayer);
@@ -353,29 +389,24 @@ latestYear.evaluate(function(latestYearValue){
   }
 
   var yearSlider = ui.Slider({
-    min: 2013,
-    max: latestYearValue,
-    value: latestYearValue,
-    step: 1,
+    min: 2013, max: latestYearValue, value: latestYearValue, step: 1,
     style: {stretch: 'horizontal', margin: '6px 0'},
     onChange: function(value) {
       var year = parseInt(value);
-      if (year !== lastYear) {
-        lastYear = year;
-        updateMapForYear(year);
-      }
+      if (year !== lastYear) { lastYear = year; updateMapForYear(year); }
     }
   });
 
   var panel = ui.Panel({
-    widgets: [title, citySelect, yearLabel, yearSlider],
+    widgets: [
+      title,
+      citySelect,
+      ui.Label('Select year:', {fontWeight: 'bold', margin: '10px 0 0 0', color: '#041C69'}),
+      yearSlider
+    ],
     style: {
-      width: '260px',
-      padding: '12px',
-      position: 'top-left',
-      backgroundColor: '#E5E4F5',
-      border: '1px solid #1e3a5a',
-      borderRadius: '10px'
+      width: '260px', padding: '12px', position: 'top-left',
+      backgroundColor: '#E5E4F5', border: '1px solid #1e3a5a', borderRadius: '10px'
     }
   });
 
